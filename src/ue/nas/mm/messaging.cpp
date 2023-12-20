@@ -105,6 +105,7 @@ static void RemoveCleartextIEs(nas::PlainMmMessage &msg, OctetString &&nasMsgCon
 
 EProcRc NasMm::sendNasMessage(const nas::PlainMmMessage &msg)
 {
+    m_logger->info("[messaging] NasMm::sendNasMessage)"); // FSI
     if (!m_base->shCtx.hasActiveCell())
     {
         m_logger->debug("NAS Transport aborted, no active cell");
@@ -126,6 +127,7 @@ EProcRc NasMm::sendNasMessage(const nas::PlainMmMessage &msg)
     OctetString pdu;
     if (hasNsCtx)
     {
+        m_logger->info("[messaging]     hasNsCtx : true"); // FSI
         if (m_usim->m_currentNsCtx->uplinkCount.sqn == 0xFF &&
             static_cast<int>(m_usim->m_currentNsCtx->uplinkCount.overflow) == 0xFFFF)
         {
@@ -139,47 +141,57 @@ EProcRc NasMm::sendNasMessage(const nas::PlainMmMessage &msg)
         if (msg.messageType == nas::EMessageType::REGISTRATION_REQUEST ||
             msg.messageType == nas::EMessageType::SERVICE_REQUEST)
         {
+            m_logger->info("[messaging]     messageType : REGISTRATION_REQUEST | SERVICE_REQUEST"); // FSI
             if (m_cmState == ECmState::CM_IDLE)
             {
                 auto copy = nas::utils::DeepCopyMsg(msg);
                 if (HasNonCleartext(msg))
                 {
+                    m_logger->info("[messaging] nas_enc::Encrypt (REGISTRATION_REQUEST|CM_IDLE)"); // FSI
                     auto temporary =
                         nas_enc::Encrypt(*m_usim->m_currentNsCtx, (nas::PlainMmMessage &)*copy, false, false);
                     m_usim->m_currentNsCtx->rollbackCountOnEncrypt();
                     auto content = temporary->plainNasMessage.copy();
                     RemoveCleartextIEs((nas::PlainMmMessage &)*copy, std::move(content));
                 }
+                m_logger->info("[messaging] nas_enc::Encrypt (REGISTRATION_REQUEST|CM_IDLE)"); // FSI
                 auto copySecured = nas_enc::Encrypt(*m_usim->m_currentNsCtx, (nas::PlainMmMessage &)*copy, true, true);
                 nas::EncodeNasMessage(*copySecured, pdu);
             }
             else
             {
+                m_logger->info("[messaging] nas_enc::Encrypt (REGISTRATION_REQUEST|!!CM_IDLE)"); // FSI
                 auto encrypted = nas_enc::Encrypt(*m_usim->m_currentNsCtx, msg, false, false);
                 nas::EncodeNasMessage(*encrypted, pdu);
             }
         }
         else if (msg.messageType == nas::EMessageType::DEREGISTRATION_REQUEST_UE_ORIGINATING)
         {
+            m_logger->info("[messaging]     messageType : DEREGISTRATION_REQUEST_UE_ORIGINATING"); // FSI
             if (m_cmState == ECmState::CM_IDLE)
             {
+                m_logger->info("[messaging] nas_enc::Encrypt (DEREGISTRATION_REQUEST_UE_ORIGINATING | CM_IDLE)"); // FSI
                 auto encrypted = nas_enc::Encrypt(*m_usim->m_currentNsCtx, msg, true, true);
                 nas::EncodeNasMessage(*encrypted, pdu);
             }
             else
             {
+                m_logger->info("[messaging] nas_enc::Encrypt (DEREGISTRATION_REQUEST_UE_ORIGINATING | !!CM_IDLE)"); // FSI
                 auto encrypted = nas_enc::Encrypt(*m_usim->m_currentNsCtx, msg, false, false);
                 nas::EncodeNasMessage(*encrypted, pdu);
             }
         }
         else
         {
+            m_logger->info("[messaging]     messageType : (else))"); // FSI
+            m_logger->info("[messaging] nas_enc::Encrypt (REGISTRATION_REQUEST | SERVICE_REQUEST)"); // FSI
             auto encrypted = nas_enc::Encrypt(*m_usim->m_currentNsCtx, msg, false, false);
             nas::EncodeNasMessage(*encrypted, pdu);
         }
     }
     else
     {
+        m_logger->info("[messaging]     hasNsCtx : false"); // FSI
         if (IsInitialNasMessage(msg))
         {
             auto copy = nas::utils::DeepCopyMsg(msg);
@@ -203,6 +215,7 @@ EProcRc NasMm::sendNasMessage(const nas::PlainMmMessage &msg)
 
 void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 {
+    m_logger->info("[messaging] NasMm::receiveNasMessage)"); // FSI
     if (msg.epd == nas::EExtendedProtocolDiscriminator::SESSION_MANAGEMENT_MESSAGES)
     {
         m_logger->warn("Bad constructed message received (SM)");
@@ -214,6 +227,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 
     if (mmMsg.sht == nas::ESecurityHeaderType::NOT_PROTECTED)
     {
+        m_logger->info("[messaging]         NOT_PROTECTED)"); // FSI
         // If any NAS signalling message is received as not integrity protected even though the secure exchange of NAS
         // messages has been established by the network, then the NAS shall discard this message
         if (m_usim->m_currentNsCtx && !IsAcceptedWithoutIntegrity((const nas::PlainMmMessage &)mmMsg))
@@ -232,6 +246,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 
     if (mmMsg.sht == nas::ESecurityHeaderType::INTEGRITY_PROTECTED_WITH_NEW_SECURITY_CONTEXT)
     {
+        m_logger->info("[messaging]         INTEGRITY_PROTECTED_WITH_NEW_SECURITY_CONTEXT)"); // FSI
         auto smcMsg = nas::DecodeNasMessage(OctetView{securedMm.plainNasMessage});
 
         if (smcMsg->epd != nas::EExtendedProtocolDiscriminator::MOBILITY_MANAGEMENT_MESSAGES ||
@@ -252,6 +267,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 
     if (mmMsg.sht == nas::ESecurityHeaderType::INTEGRITY_PROTECTED_AND_CIPHERED_WITH_NEW_SECURITY_CONTEXT)
     {
+        m_logger->info("[messaging]         INTEGRITY_PROTECTED_AND_CIPHERED_WITH_NEW_SECURITY_CONTEXT)"); // FSI
         m_logger->warn("Bad constructed message received (SHT)");
         sendMmStatus(nas::EMmCause::UNSPECIFIED_PROTOCOL_ERROR);
         return;
@@ -259,6 +275,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 
     if (!m_usim->m_currentNsCtx)
     {
+        m_logger->info("[messaging]         Secured NAS message received while no security context)"); // FSI
         m_logger->err("Secured NAS message received while no security context");
         sendMmStatus(nas::EMmCause::MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE);
         return;
@@ -273,6 +290,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
         }
     }
 
+    m_logger->info("[messaging] nas_enc::Decrypt"); // FSI
     auto decrypted = nas_enc::Decrypt(*m_usim->m_currentNsCtx, securedMm);
     if (decrypted == nullptr)
     {
@@ -306,6 +324,7 @@ void NasMm::receiveNasMessage(const nas::NasMessage &msg)
 
 void NasMm::receiveMmMessage(const nas::PlainMmMessage &msg)
 {
+    m_logger->info("[messaging] NasMm::receiveMmMessage)"); // FSI
     switch (msg.messageType)
     {
     case nas::EMessageType::REGISTRATION_ACCEPT:
@@ -358,6 +377,7 @@ void NasMm::receiveMmMessage(const nas::PlainMmMessage &msg)
 
 void NasMm::sendMmStatus(nas::EMmCause cause)
 {
+    m_logger->info("[messaging] NasMm::sendMmStatus)"); // FSI
     m_logger->warn("Sending MM Status with cause [%s]", nas::utils::EnumToString(cause));
 
     nas::FiveGMmStatus m;
@@ -367,11 +387,13 @@ void NasMm::sendMmStatus(nas::EMmCause cause)
 
 void NasMm::receiveMmStatus(const nas::FiveGMmStatus &msg)
 {
+    m_logger->info("[messaging] NasMm::receiveMmStatus)"); // FSI
     m_logger->err("MM status received with cause [%s]", nas::utils::EnumToString(msg.mmCause.value));
 }
 
 bool NasMm::checkForReplay(const nas::SecuredMmMessage &msg)
 {
+    m_logger->info("[messaging] NasMm::checkForReplay)"); // FSI
     int n = static_cast<int>(msg.sequenceNumber);
 
     if (m_usim->m_currentNsCtx)

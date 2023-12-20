@@ -17,28 +17,34 @@ namespace nr::ue
 
 void NasMm::receiveIdentityRequest(const nas::IdentityRequest &msg)
 {
+    m_logger->info("[identity] receiveIdentityRequest"); // FSI
     nas::IdentityResponse resp;
 
     if (msg.identityType.value == nas::EIdentityType::SUCI)
     {
+        m_logger->info("[identity]      IdentityType = SUCI"); // FSI
         resp.mobileIdentity = getOrGenerateSuci();
     }
     else if (msg.identityType.value == nas::EIdentityType::IMEI)
     {
+        m_logger->info("[identity]      IdentityType = IMEI"); // FSI
         resp.mobileIdentity.type = nas::EIdentityType::IMEI;
         resp.mobileIdentity.value = *m_base->config->imei;
     }
     else if (msg.identityType.value == nas::EIdentityType::IMEISV)
     {
+        m_logger->info("[identity]      IdentityType = IMEISV"); // FSI
         resp.mobileIdentity.type = nas::EIdentityType::IMEISV;
         resp.mobileIdentity.value = *m_base->config->imeiSv;
     }
     else if (msg.identityType.value == nas::EIdentityType::GUTI)
     {
+        m_logger->info("[identity]      IdentityType = GUTI"); // FSI
         resp.mobileIdentity = m_storage->storedGuti->get();
     }
     else if (msg.identityType.value == nas::EIdentityType::TMSI)
     {
+        m_logger->info("[identity]      IdentityType = TMSI"); // FSI
         // TMSI is already a part of GUTI
         resp.mobileIdentity = m_storage->storedGuti->get();
         if (resp.mobileIdentity.type != nas::EIdentityType::NO_IDENTITY)
@@ -59,6 +65,7 @@ void NasMm::receiveIdentityRequest(const nas::IdentityRequest &msg)
 
 nas::IE5gsMobileIdentity NasMm::getOrGenerateSuci()
 {
+    m_logger->info("[identity] getOrGenerateSuci"); // FSI
     if (m_timers->t3519.isRunning() && m_storage->storedSuci->get().type != nas::EIdentityType::NO_IDENTITY)
         return m_storage->storedSuci->get();
 
@@ -73,12 +80,14 @@ nas::IE5gsMobileIdentity NasMm::getOrGenerateSuci()
 
 nas::IE5gsMobileIdentity NasMm::generateSuci()
 {
+    m_logger->info("[identity] generateSuci"); // FSI
     auto &supi = m_base->config->supi;
     auto &plmn = m_base->config->hplmn;
     auto &protectionScheme = m_base->config->protectionScheme;
     auto &homeNetworkPublicKeyId = m_base->config->homeNetworkPublicKeyId;
     auto &homeNetworkPublicKey = m_base->config->homeNetworkPublicKey;
 
+    m_logger->info("[identity]      generateSuci - protection scheme = %d", protectionScheme); // FSI
     if (!supi.has_value())
         return {};
 
@@ -105,6 +114,7 @@ nas::IE5gsMobileIdentity NasMm::generateSuci()
         ret.imsi.routingIndicator = "0000";
     }
     if (protectionScheme == 0) {
+        m_logger->info("[identity]      generateSuci - protection scheme = 0"); // FSI
         ret.imsi.protectionSchemaId = 0;
         ret.imsi.homeNetworkPublicKeyIdentifier = 0;
         ret.imsi.schemeOutput = imsi.substr(plmn.isLongMnc ? 6 : 5);
@@ -112,6 +122,7 @@ nas::IE5gsMobileIdentity NasMm::generateSuci()
     }
     else if (protectionScheme == 1)
     {
+        m_logger->info("[identity]      generateSuci - protection scheme = 1"); // FSI
         ret.imsi.protectionSchemaId = 1;
         ret.imsi.homeNetworkPublicKeyIdentifier = homeNetworkPublicKeyId;
         ret.imsi.schemeOutput = generateSUCIProfileA(imsi.substr(plmn.isLongMnc ? 6 : 5), homeNetworkPublicKey);
@@ -126,6 +137,7 @@ nas::IE5gsMobileIdentity NasMm::generateSuci()
 
 std::string NasMm::generateSUCIProfileA(const std::string &imsi, const OctetString &hnPublicKey)
 {
+    m_logger->info("[identity] generateSUCIProfileA (imsi : %s - hnPublicKey : %s)", imsi, hnPublicKey.toHexString()); // FSI
     std::string name("Seed for x25519 generation");
     std::string seed;
     Random rnd = Random::Mixed(name);
@@ -174,6 +186,7 @@ std::string NasMm::generateSUCIProfileA(const std::string &imsi, const OctetStri
 
 nas::IE5gsMobileIdentity NasMm::getOrGeneratePreferredId()
 {
+    m_logger->info("[identity] getOrGeneratePreferredId"); // FSI
     if (m_storage->storedGuti->get().type != nas::EIdentityType::NO_IDENTITY)
         return m_storage->storedGuti->get();
 

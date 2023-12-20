@@ -28,6 +28,7 @@ static nas::IEDeRegistrationType MakeDeRegistrationType(EDeregCause deregCause)
 
 EProcRc NasMm::sendDeregistration(EDeregCause deregCause)
 {
+    m_logger->info("[dereg] sendDeregistration"); // FSI
     auto currentTai = m_base->shCtx.getCurrentTai();
     if (!currentTai.hasValue())
         return EProcRc::STAY;
@@ -118,6 +119,7 @@ EProcRc NasMm::sendDeregistration(EDeregCause deregCause)
 
 void NasMm::receiveDeregistrationAccept(const nas::DeRegistrationAcceptUeOriginating &msg)
 {
+    m_logger->info("[dereg] receiveDeregistrationAccept"); // FSI
     m_logger->debug("De-registration accept received");
 
     if (m_mmState != EMmState::MM_DEREGISTERED_INITIATED)
@@ -144,6 +146,7 @@ void NasMm::receiveDeregistrationAccept(const nas::DeRegistrationAcceptUeOrigina
 
 void NasMm::receiveDeregistrationRequest(const nas::DeRegistrationRequestUeTerminated &msg)
 {
+    m_logger->info("[dereg] receiveDeregistrationRequest"); // FSI
     if (m_rmState != ERmState::RM_REGISTERED)
     {
         m_logger->warn("De-registration message ignored. UE is already de-registered");

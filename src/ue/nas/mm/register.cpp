@@ -17,6 +17,7 @@ namespace nr::ue
 
 EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
 {
+	m_logger->info("[register] NasMm::sendInitialRegistration"); // FSI
     if (m_rmState != ERmState::RM_DEREGISTERED)
     {
         m_logger->warn("Registration could not be triggered. UE is not in RM-DEREGISTERED state.");
@@ -65,13 +66,16 @@ EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
     m_usim->m_currentNsCtx = {};
 
     // Prepare requested NSSAI
+    m_logger->info("[register]      Prepare requested NSSAI"); // FSI
     bool isDefaultNssai{};
     auto requestedNssai = makeRequestedNssai(isDefaultNssai);
 
     // Prepare FOR pending field
+    m_logger->info("[register]      Prepare FOR pending field"); // FSI
     nas::EFollowOnRequest followOn = nas::EFollowOnRequest::FOR_PENDING;
 
     // Create registration request
+    m_logger->info("[register]      Create registration request"); // FSI
     auto request = std::make_unique<nas::RegistrationRequest>();
     request->registrationType =
         nas::IE5gsRegistrationType{followOn, isEmergencyReg ? nas::ERegistrationType::EMERGENCY_REGISTRATION
@@ -84,12 +88,14 @@ EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
     //                   : nas::EDefaultConfiguredNssaiIndication::NOT_CREATED_FROM_DEFAULT_CONFIGURED_NSSAI;
 
     // Assign MM capability
+    m_logger->info("[register]      Assign MM capability"); // FSI
     request->mmCapability = nas::IE5gMmCapability{};
     request->mmCapability->s1Mode = nas::EEpcNasSupported::NOT_SUPPORTED;
     request->mmCapability->hoAttach = nas::EHandoverAttachSupported::NOT_SUPPORTED;
     request->mmCapability->lpp = nas::ELtePositioningProtocolCapability::NOT_SUPPORTED;
 
     // Assign other fields
+    m_logger->info("[register]      Assign other fields"); // FSI
     request->mobileIdentity = getOrGeneratePreferredId();
     if (m_storage->lastVisitedRegisteredTai->get().hasValue())
         request->lastVisitedRegisteredTai = nas::IE5gsTrackingAreaIdentity{m_storage->lastVisitedRegisteredTai->get()};
@@ -100,6 +106,7 @@ EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
         nas::IE5gsUpdateType(nas::ESmsRequested::NOT_SUPPORTED, nas::ENgRanRadioCapabilityUpdate::NOT_NEEDED);
 
     // Assign ngKSI
+    m_logger->info("[register]      Assign ngKSI"); // FSI
     if (m_usim->m_currentNsCtx)
     {
         request->nasKeySetIdentifier.tsc = m_usim->m_currentNsCtx->tsc;
@@ -107,11 +114,13 @@ EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
     }
 
     // Send the message
+    m_logger->info("[register]      Send the message"); // FSI
     auto rc = sendNasMessage(*request);
     if (rc != EProcRc::OK)
         return rc;
 
     // Switch MM state
+    m_logger->info("[register]      Switch MM state"); // FSI
     switchMmState(EMmSubState::MM_REGISTERED_INITIATED_PS);
 
     m_lastRegistrationRequest = std::move(request);
@@ -127,6 +136,7 @@ EProcRc NasMm::sendInitialRegistration(EInitialRegCause regCause)
 
 EProcRc NasMm::sendMobilityRegistration(ERegUpdateCause updateCause)
 {
+	m_logger->info("[register] NasMm::sendMobilityRegistration"); // FSI
     if (m_rmState == ERmState::RM_DEREGISTERED)
     {
         m_logger->warn("Mobility updating could not be triggered. UE is in RM-DEREGISTERED state.");
@@ -259,6 +269,7 @@ EProcRc NasMm::sendMobilityRegistration(ERegUpdateCause updateCause)
 
 void NasMm::receiveRegistrationAccept(const nas::RegistrationAccept &msg)
 {
+	m_logger->info("[register] NasMm::receiveRegistrationAccept"); // FSI
     if (m_mmState != EMmState::MM_REGISTERED_INITIATED)
     {
         m_logger->warn("Registration Accept ignored since the MM state is not MM_REGISTERED_INITIATED");
@@ -290,6 +301,7 @@ void NasMm::receiveRegistrationAccept(const nas::RegistrationAccept &msg)
 
 void NasMm::receiveInitialRegistrationAccept(const nas::RegistrationAccept &msg)
 {
+	m_logger->info("[register] NasMm::receiveInitialRegistrationAccept"); // FSI
     Tai currentTai = m_base->shCtx.getCurrentTai();
     Plmn currentPlmn = currentTai.plmn;
 
@@ -437,6 +449,7 @@ void NasMm::receiveInitialRegistrationAccept(const nas::RegistrationAccept &msg)
 
 void NasMm::receiveMobilityRegistrationAccept(const nas::RegistrationAccept &msg)
 {
+	m_logger->info("[register] NasMm::receiveMobilityRegistrationAccept"); // FSI
     Tai currentTai = m_base->shCtx.getCurrentTai();
     Plmn currentPlmn = currentTai.plmn;
 
@@ -581,6 +594,7 @@ void NasMm::receiveMobilityRegistrationAccept(const nas::RegistrationAccept &msg
 
 void NasMm::receiveRegistrationReject(const nas::RegistrationReject &msg)
 {
+	m_logger->info("[register] NasMm::sendInitialRegistration"); // FSI
     if (m_mmState != EMmState::MM_REGISTERED_INITIATED)
     {
         m_logger->warn("Registration Reject ignored since the MM state is not MM_REGISTERED_INITIATED");
@@ -607,6 +621,7 @@ void NasMm::receiveRegistrationReject(const nas::RegistrationReject &msg)
 
 void NasMm::receiveInitialRegistrationReject(const nas::RegistrationReject &msg)
 {
+	m_logger->info("[register] NasMm::receiveInitialRegistrationReject"); // FSI
     auto cause = msg.mmCause.value;
     auto regType = m_lastRegistrationRequest->registrationType.registrationType;
 
@@ -765,6 +780,7 @@ void NasMm::receiveInitialRegistrationReject(const nas::RegistrationReject &msg)
 
 void NasMm::receiveMobilityRegistrationReject(const nas::RegistrationReject &msg)
 {
+	m_logger->info("[register] NasMm::receiveMobilityRegistrationReject"); // FSI
     auto cause = msg.mmCause.value;
     auto regType = m_lastRegistrationRequest->registrationType.registrationType;
 
@@ -931,6 +947,7 @@ void NasMm::receiveMobilityRegistrationReject(const nas::RegistrationReject &msg
 
 void NasMm::handleAbnormalInitialRegFailure(nas::ERegistrationType regType)
 {
+	m_logger->info("[register] NasMm::handleAbnormalInitialRegFailure"); // FSI
     // Timer T3510 shall be stopped if still running
     m_timers->t3510.stop();
 
@@ -975,6 +992,7 @@ void NasMm::handleAbnormalInitialRegFailure(nas::ERegistrationType regType)
 
 void NasMm::handleAbnormalMobilityRegFailure(nas::ERegistrationType regType)
 {
+	m_logger->info("[register] NasMm::handleAbnormalMobilityRegFailure"); // FSI
     // "Timer T3510 shall be stopped if still running"
     m_timers->t3510.stop();
 

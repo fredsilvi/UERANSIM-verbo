@@ -81,11 +81,13 @@ void NasMm::onQuit()
 
 void NasMm::triggerMmCycle()
 {
+    m_logger->info("[base] triggerMmCycle"); // FSI
     m_base->nasTask->push(std::make_unique<NmUeNasToNas>(NmUeNasToNas::PERFORM_MM_CYCLE));
 }
 
 void NasMm::performMmCycle()
 {
+    m_logger->info("[base] performMmCycle"); // FSI
     /* Do nothing in case of MM-NULL */
     if (m_mmState == EMmState::MM_NULL)
         return;
@@ -217,6 +219,7 @@ void NasMm::performMmCycle()
 
 void NasMm::switchMmState(EMmSubState subState)
 {
+    m_logger->info("[base] switchMmState"); // FSI
     EMmState state = GetMmStateFromSubState(subState);
 
     ERmState oldRmState = m_rmState;
@@ -260,6 +263,7 @@ void NasMm::switchMmState(EMmSubState subState)
 
 void NasMm::switchCmState(ECmState state)
 {
+    m_logger->info("[base] switchCmState"); // FSI
     ECmState oldState = m_cmState;
     m_cmState = state;
 
@@ -283,6 +287,7 @@ void NasMm::switchCmState(ECmState state)
 
 void NasMm::switchUState(E5UState state)
 {
+    m_logger->info("[base] switchUState"); // FSI
     E5UState oldState = m_storage->uState->get();
     m_storage->uState->set(state);
 
@@ -302,6 +307,7 @@ void NasMm::switchUState(E5UState state)
 
 void NasMm::onSwitchMmState(EMmState oldState, EMmState newState, EMmSubState oldSubState, EMmSubState newSubSate)
 {
+    m_logger->info("[base] onSwitchMmState"); // FSI
     // "The UE shall mark the 5G NAS security context on the USIM or in the non-volatile memory as invalid when the UE
     // initiates an initial registration procedure as described in subclause 5.5.1.2 or when the UE leaves state
     // 5GMM-DEREGISTERED for any other state except 5GMM-NULL."
@@ -341,6 +347,7 @@ void NasMm::onSwitchMmState(EMmState oldState, EMmState newState, EMmSubState ol
 
 void NasMm::onSwitchRmState(ERmState oldState, ERmState newState)
 {
+    m_logger->info("[base] onSwitchRmState"); // FSI
     if (oldState == ERmState::RM_REGISTERED && newState == ERmState::RM_REGISTERED)
     {
         // "The UE shall delete (List of equivalent PLMNs) ...  when the UE registered for emergency services
@@ -352,6 +359,7 @@ void NasMm::onSwitchRmState(ERmState oldState, ERmState newState)
 
 void NasMm::onSwitchCmState(ECmState oldState, ECmState newState)
 {
+    m_logger->info("[base] onSwitchCmState"); // FSI
     if (oldState == ECmState::CM_CONNECTED && newState == ECmState::CM_IDLE)
     {
         // 5.5.1.2.7 Abnormal cases in the UE (in registration)
@@ -412,15 +420,18 @@ void NasMm::onSwitchCmState(ECmState oldState, ECmState newState)
 
 void NasMm::onSwitchUState(E5UState oldState, E5UState newState)
 {
+    m_logger->info("[base] onSwitchUState"); // FSI
 }
 
 void NasMm::onSwitchOn()
 {
+    m_logger->info("[base] onSwitchOn"); // FSI
     resetRegAttemptCounter();
 }
 
 void NasMm::onSimInsertion()
 {
+    m_logger->info("[base] onSimInsertion"); // FSI
     resetRegAttemptCounter();
 
     switchMmState(EMmSubState::MM_DEREGISTERED_PS);
@@ -428,6 +439,7 @@ void NasMm::onSimInsertion()
 
 void NasMm::onSwitchOff()
 {
+    m_logger->info("[base] onSwitchOff"); // FSI
     m_storage->serviceAreaList->clear();
 
     m_storage->forbiddenTaiListRoaming->clear();
@@ -436,6 +448,7 @@ void NasMm::onSwitchOff()
 
 void NasMm::onSimRemoval()
 {
+    m_logger->info("[base] onSimRemoval"); // FSI
     m_storage->equivalentPlmnList->clear();
 
     m_storage->serviceAreaList->clear();

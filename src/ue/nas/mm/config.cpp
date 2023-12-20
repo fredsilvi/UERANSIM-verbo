@@ -18,6 +18,7 @@ namespace nr::ue
 
 void NasMm::receiveConfigurationUpdate(const nas::ConfigurationUpdateCommand &msg)
 {
+    m_logger->info("[config] receiveConfigurationUpdate"); // FSI
     m_logger->debug("Configuration Update Command received");
 
     // Abnormal case: 5.4.4.5, c) Generic UE configuration update and de-registration procedure collision
@@ -207,6 +208,7 @@ void NasMm::receiveConfigurationUpdate(const nas::ConfigurationUpdateCommand &ms
 
 void NasMm::updateForbiddenTaiListsForAllowedIndications()
 {
+    m_logger->info("[config] updateForbiddenTaiListsForAllowedIndications"); // FSI
     // "A tracking area shall be removed from the list of "5GS forbidden tracking areas for roaming", as well as the
     // list of "5GS forbidden tracking areas for regional provision of service", if the UE receives the tracking area in
     // the TAI list or the Service area list of "allowed tracking areas" in REGISTRATION ACCEPT message or a

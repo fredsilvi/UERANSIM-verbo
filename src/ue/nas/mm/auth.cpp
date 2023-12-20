@@ -16,6 +16,7 @@ namespace nr::ue
 
 void NasMm::receiveAuthenticationRequest(const nas::AuthenticationRequest &msg)
 {
+    m_logger->debug("[auth] receiveAuthenticationRequest"); // FSI
     m_logger->debug("Authentication Request received");
 
     if (!m_usim->isValid())
@@ -34,6 +35,7 @@ void NasMm::receiveAuthenticationRequest(const nas::AuthenticationRequest &msg)
 
 void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &msg)
 {
+    m_logger->debug("[auth] receiveAuthenticationRequestEap"); // FSI
     Plmn currentPlmn = m_base->shCtx.getCurrentPlmn();
     if (!currentPlmn.hasValue())
         return;
@@ -69,6 +71,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
     };
 
     // ========================== Check the received message syntactically ==========================
+    m_logger->info("[auth]      Check the received message syntactically"); // FSI
 
     if (!msg.eapMessage.has_value())
     {
@@ -91,6 +94,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
     }
 
     // ================================ Check the received parameters syntactically ================================
+    m_logger->info("[auth]      Check the received parameters syntactically"); // FSI
 
     auto receivedRand = receivedEap.attributes.getRand();
     auto receivedMac = receivedEap.attributes.getMac();
@@ -103,6 +107,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
     }
 
     // =================================== Check the received KDF and KDF_INPUT ===================================
+    m_logger->info("[auth]      Check the received KDF and KDF_INPUT"); // FSI
 
     if (receivedEap.attributes.getKdf() != 1)
     {
@@ -115,6 +120,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
         return;
     }
 
+    m_logger->info("[auth] #keys Check the received KDF and KDF_INPUT (keys::ConstructServingNetworkName)"); // FSI
     auto snn = keys::ConstructServingNetworkName(currentPlmn);
 
     if (receivedEap.attributes.getKdfInput() != OctetString::FromAscii(snn))
@@ -127,6 +133,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
     }
 
     // =================================== Check the received ngKSI ===================================
+    m_logger->info("[auth]      Check the received ngKSI"); // FSI
 
     if (msg.ngKSI.tsc == nas::ETypeOfSecurityContext::MAPPED_SECURITY_CONTEXT)
     {
@@ -154,6 +161,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
     }
 
     // =================================== Check the received AUTN ===================================
+    m_logger->info("[auth]      Check the received AUTN"); // FSI
 
     auto autnCheck = validateAutn(receivedRand, receivedAutn);
     m_timers->t3516.start();
@@ -163,13 +171,16 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
         // Calculate milenage
         auto milenage = calculateMilenage(m_usim->m_sqnMng->getSqn(), receivedRand, false);
         auto sqnXorAk = OctetString::Xor(m_usim->m_sqnMng->getSqn(), milenage.ak);
+        m_logger->info("[auth] #keys Check the received AUTN (keys::CalculateCkPrimeIkPrime)"); // FSI
         auto ckPrimeIkPrime = keys::CalculateCkPrimeIkPrime(milenage.ck, milenage.ik, snn, sqnXorAk);
         auto &ckPrime = ckPrimeIkPrime.first;
         auto &ikPrime = ckPrimeIkPrime.second;
 
+        m_logger->info("[auth] #keys Check the received AUTN (keys::CalculateMk)"); // FSI
         auto mk = keys::CalculateMk(ckPrime, ikPrime, m_base->config->supi.value());
         auto kaut = mk.subCopy(16, 32);
 
+        m_logger->info("[auth] #keys Check the received AUTN (keys::CalculateMacForEapAkaPrime)"); // FSI
         // Check the received AT_MAC
         auto expectedMac = keys::CalculateMacForEapAkaPrime(kaut, receivedEap);
         if (expectedMac != receivedMac)
@@ -192,14 +203,17 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
         m_usim->m_rand = receivedRand.copy();
         m_usim->m_resStar = {};
 
+        m_logger->info("[auth] Check the received AUTN (keys::CalculateKAusfForEapAkaPrime)"); // FSI
         // Create new partial native NAS security context and continue with key derivation
         auto kAusf = keys::CalculateKAusfForEapAkaPrime(mk);
         m_usim->m_nonCurrentNsCtx = std::make_unique<NasSecurityContext>();
         m_usim->m_nonCurrentNsCtx->tsc = msg.ngKSI.tsc;
         m_usim->m_nonCurrentNsCtx->ngKsi = msg.ngKSI.ksi;
+        m_logger->info("[auth] #keys Check the received AUTN (keys::CalculateKAusfFor5gAka)"); // FSI
         m_usim->m_nonCurrentNsCtx->keys.kAusf = keys::CalculateKAusfFor5gAka(milenage.ck, milenage.ik, snn, sqnXorAk);
         m_usim->m_nonCurrentNsCtx->keys.abba = msg.abba.rawData.copy();
 
+        m_logger->info("[auth] #keys DeriveKeysSeafAmf"); // FSI
         keys::DeriveKeysSeafAmf(*m_base->config, currentPlmn, *m_usim->m_nonCurrentNsCtx);
 
         // Send response
@@ -212,6 +226,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
             akaPrimeResponse->attributes.putMac(OctetString::FromSpare(16)); // Dummy mac
             akaPrimeResponse->attributes.putKdf(1);
 
+            m_logger->info("[auth] #keys CalculateMacForEapAkaPrime"); // FSI
             // Calculate and put mac value
             auto sendingMac = keys::CalculateMacForEapAkaPrime(kaut, *akaPrimeResponse);
             akaPrimeResponse->attributes.putMac(sendingMac);
@@ -238,6 +253,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
 
         m_timers->t3520.start();
 
+        m_logger->info("[auth] #keys CalculateAuts"); // FSI
         auto milenage = calculateMilenage(m_usim->m_sqnMng->getSqn(), receivedRand, true);
         auto auts = keys::CalculateAuts(m_usim->m_sqnMng->getSqn(), milenage.ak_r, milenage.mac_s);
 
@@ -261,6 +277,7 @@ void NasMm::receiveAuthenticationRequestEap(const nas::AuthenticationRequest &ms
 
 void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &msg)
 {
+    m_logger->debug("[auth] receiveAuthenticationRequest5gAka"); // FSI
     Plmn currentPLmn = m_base->shCtx.getCurrentPlmn();
     if (!currentPLmn.hasValue())
         return;
@@ -292,6 +309,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
     };
 
     // ========================== Check the received parameters syntactically ==========================
+    m_logger->info("[auth]      Check the received parameters syntactically"); // FSI
 
     if (!msg.authParamRAND.has_value() || !msg.authParamAUTN.has_value())
     {
@@ -306,6 +324,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
     }
 
     // =================================== Check the received ngKSI ===================================
+    m_logger->info("[auth]      Check the received ngKSI"); // FSI
 
     if (msg.ngKSI.tsc == nas::ETypeOfSecurityContext::MAPPED_SECURITY_CONTEXT)
     {
@@ -333,6 +352,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
     }
 
     // ============================================ Others ============================================
+    m_logger->info("[auth]      Others"); // FSI
 
     auto &rand = msg.authParamRAND->value;
     auto &autn = msg.authParamAUTN->value;
@@ -350,16 +370,19 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
 
     if (autnCheck == EAutnValidationRes::OK)
     {
+        m_logger->info("[auth] #keys ConstructServingNetworkName"); // FSI
         // Calculate milenage
         auto milenage = calculateMilenage(m_usim->m_sqnMng->getSqn(), rand, false);
         auto ckIk = OctetString::Concat(milenage.ck, milenage.ik);
         auto sqnXorAk = OctetString::Xor(m_usim->m_sqnMng->getSqn(), milenage.ak);
         auto snn = keys::ConstructServingNetworkName(currentPLmn);
 
+        m_logger->info("[auth] #keys CalculateResStar"); // FSI
         // Store the relevant parameters
         m_usim->m_rand = rand.copy();
         m_usim->m_resStar = keys::CalculateResStar(ckIk, snn, rand, milenage.res);
 
+        m_logger->info("[auth] #keys CalculateKAusfFor5gAka"); // FSI
         // Create new partial native NAS security context and continue with key derivation
         m_usim->m_nonCurrentNsCtx = std::make_unique<NasSecurityContext>();
         m_usim->m_nonCurrentNsCtx->tsc = msg.ngKSI.tsc;
@@ -367,6 +390,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
         m_usim->m_nonCurrentNsCtx->keys.kAusf = keys::CalculateKAusfFor5gAka(milenage.ck, milenage.ik, snn, sqnXorAk);
         m_usim->m_nonCurrentNsCtx->keys.abba = msg.abba.rawData.copy();
 
+        m_logger->info("[auth] #keys DeriveKeysSeafAmf"); // FSI
         keys::DeriveKeysSeafAmf(*m_base->config, currentPLmn, *m_usim->m_nonCurrentNsCtx);
 
         // Send response
@@ -393,6 +417,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
 
         m_timers->t3520.start();
 
+        m_logger->info("[auth] #keys CalculateAuts"); // FSI
         auto milenage = calculateMilenage(m_usim->m_sqnMng->getSqn(), rand, true);
         auto auts = keys::CalculateAuts(m_usim->m_sqnMng->getSqn(), milenage.ak_r, milenage.mac_s);
         sendFailure(nas::EMmCause::SYNCH_FAILURE, std::move(auts));
@@ -408,6 +433,7 @@ void NasMm::receiveAuthenticationRequest5gAka(const nas::AuthenticationRequest &
 
 void NasMm::receiveAuthenticationResult(const nas::AuthenticationResult &msg)
 {
+    m_logger->debug("[auth] receiveAuthenticationResult"); // FSI
     if (msg.abba.has_value())
         m_usim->m_nonCurrentNsCtx->keys.abba = msg.abba->rawData.copy();
 
@@ -421,6 +447,7 @@ void NasMm::receiveAuthenticationResult(const nas::AuthenticationResult &msg)
 
 void NasMm::receiveAuthenticationReject(const nas::AuthenticationReject &msg)
 {
+    m_logger->debug("[auth] receiveAuthenticationReject"); // FSI
     m_logger->err("Authentication Reject received");
 
     // The RAND and RES* values stored in the ME shall be deleted and timer T3516, if running, shall be stopped
@@ -459,11 +486,13 @@ void NasMm::receiveAuthenticationReject(const nas::AuthenticationReject &msg)
 
 void NasMm::receiveEapSuccessMessage(const eap::Eap &eap)
 {
+    m_logger->debug("[auth] receiveEapSuccessMessage"); // FSI
     // do nothing
 }
 
 void NasMm::receiveEapFailureMessage(const eap::Eap &eap)
 {
+    m_logger->debug("[auth] receiveEapFailureMessage"); // FSI
     m_logger->debug("Handling EAP-failure");
 
     // UE shall delete the partial native 5G NAS security context if any was created
@@ -472,6 +501,7 @@ void NasMm::receiveEapFailureMessage(const eap::Eap &eap)
 
 EAutnValidationRes NasMm::validateAutn(const OctetString &rand, const OctetString &autn)
 {
+    m_logger->debug("[auth] validateAutn"); // FSI
     // Decode AUTN
     OctetString receivedSQNxorAK = autn.subCopy(0, 6);
     OctetString receivedAMF = autn.subCopy(6, 2);
@@ -524,6 +554,7 @@ crypto::milenage::Milenage NasMm::calculateMilenage(const OctetString &sqn, cons
 
 bool NasMm::networkFailingTheAuthCheck(bool hasChance)
 {
+    m_logger->debug("[auth] networkFailingTheAuthCheck"); // FSI
     if (hasChance && m_nwConsecutiveAuthFailure++ < 3)
         return false;
 

@@ -50,6 +50,7 @@ static std::unique_ptr<NasSecurityContext> LocallyDeriveNsc()
 
 void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
 {
+    m_logger->info("[security] NasMm::receiveSecurityModeCommand"); // FSI
     m_logger->debug("Security Mode Command received");
 
     auto reject = [this](nas::EMmCause cause) {
@@ -65,6 +66,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     m_timers->t3516.stop();
 
     // ============================== Check the received ngKSI ==============================
+    m_logger->info("[security]      Check the received ngKSI"); // FSI
 
     bool locallyDerived = false;
 
@@ -79,6 +81,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
         msg.selectedNasSecurityAlgorithms.integrity == nas::ETypeOfIntegrityProtectionAlgorithm::IA0 &&
         msg.selectedNasSecurityAlgorithms.ciphering == nas::ETypeOfCipheringAlgorithm::EA0)
     {
+        m_logger->info("[security]      IntegrityProtectionAlgorithm::IA0 CipheringAlgorithm::EA0"); // FSI
         if (hasEmergency())
         {
             m_logger->debug("Locally deriving a current NAS security context");
@@ -93,6 +96,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
         }
     }
 
+    m_logger->info("[security]      FindSecurityContext <usim>"); // FSI
     int whichCtx = FindSecurityContext(msg.ngKsi.ksi, m_usim->m_currentNsCtx, m_usim->m_nonCurrentNsCtx);
     if (whichCtx == -1)
     {
@@ -101,9 +105,11 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
         return;
     }
 
+    m_logger->info("[security]      <usim>"); // FSI
     auto &nsCtx = whichCtx == 0 ? m_usim->m_currentNsCtx : m_usim->m_nonCurrentNsCtx;
 
     // ======================== Check replayed UE security capabilities ========================
+    m_logger->info("[security]      Check replayed UE security capabilities"); // FSI
 
     if (!nas::utils::DeepEqualsIe(msg.replayedUeSecurityCapabilities, createSecurityCapabilityIe()))
     {
@@ -113,6 +119,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // ======================== Check selected NAS security algorithms ========================
+    m_logger->info("[security]      Check selected NAS security algorithms"); // FSI
 
     {
         auto integrity = msg.selectedNasSecurityAlgorithms.integrity;
@@ -121,6 +128,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
         if (integrity > nas::ETypeOfIntegrityProtectionAlgorithm::IA3_128 ||
             ciphering > nas::ETypeOfCipheringAlgorithm::EA3_128)
         {
+            m_logger->info("[security]      IntegrityProtectionAlgorithm::IA3_128 || CipheringAlgorithm::EA3_128"); // FSI
             m_logger->err("Selected NAS security algorithms are invalid");
             reject(nas::EMmCause::UE_SECURITY_CAP_MISMATCH);
             return;
@@ -135,6 +143,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // ======================== Check the integrity with new security context ========================
+    m_logger->info("[security]      Check the integrity with new security context"); // FSI
 
     bool clearNasCount = false;
     bool horizontalDeriveNeeded =
@@ -143,18 +152,22 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
 
     if (msg.selectedNasSecurityAlgorithms.integrity != nas::ETypeOfIntegrityProtectionAlgorithm::IA0)
     {
+        m_logger->info("[security]      !IntegrityProtectionAlgorithm::IA0"); // FSI
         NasSecurityContext tmpCtx = nsCtx->deepCopy();
 
         tmpCtx.integrity = msg.selectedNasSecurityAlgorithms.integrity;
         tmpCtx.ciphering = msg.selectedNasSecurityAlgorithms.ciphering;
 
+        m_logger->info("[security] #keys keys::DeriveAmfPrimeInMobility"); // FSI
         // Before deriving the keys for temporary NAS security context, concern the horizontal derivation case
         //  Because 33.501/6.9.3 says integrity check should be performed with the new key
         if (horizontalDeriveNeeded)
             tmpCtx.keys.kAmf = keys::DeriveAmfPrimeInMobility(true, tmpCtx.uplinkCount, tmpCtx.keys.kAmf);
 
+        m_logger->info("[security] #keys keys::DeriveNasKeys"); // FSI
         keys::DeriveNasKeys(tmpCtx);
 
+        m_logger->info("[security] #keys nas_enc::ComputeMac"); // FSI
         uint32_t calculatedMac = nas_enc::ComputeMac(tmpCtx.integrity, tmpCtx.downlinkCount, tmpCtx.is3gppAccess, false,
                                                      tmpCtx.keys.kNasInt, msg._originalPlainNasPdu);
 
@@ -187,7 +200,9 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // ============================ Process the security context ============================
+    m_logger->info("[security]      Process the security context"); // FSI
 
+    m_logger->info("[security] #keys Process the security context"); // FSI
     // Clear the NAS count if necessary
     if (clearNasCount)
         nsCtx->downlinkCount = {};
@@ -199,12 +214,14 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     // Handle horizontal derivation
     if (horizontalDeriveNeeded)
     {
+        m_logger->info("[security] #keys keys::DeriveAmfPrimeInMobility"); // FSI
         m_logger->debug("Performing kAMF' derivation from kAMF in mobility");
         nsCtx->keys.kAmf = keys::DeriveAmfPrimeInMobility(true, nsCtx->uplinkCount, nsCtx->keys.kAmf);
         nsCtx->uplinkCount = {};
         nsCtx->downlinkCount = {};
     }
 
+    m_logger->info("[security] #keys keys::DeriveNasKeys"); // FSI
     // Assign selected algorithms to security context, and derive NAS keys
     nsCtx->integrity = msg.selectedNasSecurityAlgorithms.integrity;
     nsCtx->ciphering = msg.selectedNasSecurityAlgorithms.ciphering;
@@ -226,6 +243,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
         m_usim->m_currentNsCtx = std::make_unique<NasSecurityContext>(nsCtx->deepCopy());
 
     // ============================ Handle EAP-Success message if any. ============================
+    m_logger->info("[security]      Handle EAP-Success message if any."); // FSI
 
     if (msg.eapMessage.has_value())
     {
@@ -237,6 +255,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // ============================ Send the Security Mode Complete. ============================
+    m_logger->info("[security]      Send the Security Mode Complete."); // FSI
 
     nas::SecurityModeComplete resp{};
 
@@ -252,6 +271,7 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // Handle NAS message container
+    m_logger->info("[security]      Handle NAS message container"); // FSI
     if (msg.additional5gSecurityInformation.has_value() &&
         msg.additional5gSecurityInformation->rinmr == nas::ERetransmissionOfInitialNasMessageRequest::REQUESTED)
     {
@@ -268,11 +288,13 @@ void NasMm::receiveSecurityModeCommand(const nas::SecurityModeCommand &msg)
     }
 
     // Send response
+    m_logger->info("[security]      sendNasMessage"); // FSI
     sendNasMessage(resp);
 }
 
 nas::IEUeSecurityCapability NasMm::createSecurityCapabilityIe()
 {
+    m_logger->info("[security] NasMm::createSecurityCapabilityIe"); // FSI
     auto &algs = m_base->config->supportedAlgs;
     auto supported = ~0;
 
